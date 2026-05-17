@@ -1,0 +1,60 @@
+#version=RHEL9
+text
+url --url={{ image.repo_url }}
+keyboard --vckeymap={{ vars.keyboard|default("us", true) }}
+lang {{ vars.locale|default("en_US.UTF-8", true) }}
+timezone {{ vars.timezone|default("UTC", true) }} --utc
+network --bootproto=dhcp --device=link --activate --hostname={{ host.hostname or "localhost" }}
+firewall --enabled --service=ssh
+selinux --enforcing
+services --enabled=sshd,chronyd
+firstboot --disable
+skipx
+zerombr
+clearpart --all --initlabel
+autopart --type={{ vars.autopart_type|default("lvm", true) }}
+{% if root_password_hash %}
+rootpw --iscrypted {{ root_password_hash }}
+{% else %}
+rootpw --lock
+{% endif %}
+reboot
+
+%packages
+@core
+chrony
+curl
+openssh-server
+{% for pkg in extras.packages %}
+{{ pkg }}
+{% endfor %}
+%end
+
+%post --interpreter=/bin/bash --log=/root/pxe-app-post.log
+set -euxo pipefail
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+cat > /root/.ssh/authorized_keys <<'EOF'
+{% for key in authorized_keys %}
+{{ key }}
+{% endfor %}
+EOF
+chmod 600 /root/.ssh/authorized_keys
+{% if extras.bash %}
+cat > /root/pxe-finish.sh <<'PXEFINISH'
+{{ extras.bash }}
+PXEFINISH
+chmod +x /root/pxe-finish.sh
+/root/pxe-finish.sh > /root/pxe-finish.log 2>&1 || true
+{% endif %}
+{% if extras.ansible_pull_url %}
+dnf install -y ansible-core git || yum install -y ansible git || true
+ansible-pull -U {{ extras.ansible_pull_url }} {{ extras.ansible_pull_playbook or 'local.yml' }} >> /root/pxe-ansible-pull.log 2>&1 || true
+{% endif %}
+curl -fsS -X POST --data-urlencode status=done {{ host.callback_url }} || true
+%end
+
+%onerror
+curl -fsS -X POST --data-urlencode status=failed --data-urlencode message=anaconda-onerror {{ host.callback_url }} || true
+%end
+

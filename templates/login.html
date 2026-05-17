@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Sign in | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="brand" style="color:var(--ink); margin-bottom: 0.4rem;">
+    <span class="brand-mark">px</span><span>pxe-app</span>
+  </div>
+  <h1>Sign in</h1>
+  <p class="muted">Use an admin account created with environment bootstrap or <code>pxe-admin create-admin</code>.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/login" class="stack">
+    <input type="hidden" name="next" value="{{ next }}">
+    <div>
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" required>
+    </div>
+    <div>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <button type="submit">Sign in</button>
+  </form>
+</section>
+{% endblock %}

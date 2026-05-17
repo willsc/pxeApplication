@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Assets | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <div>
+      <h1>Assets</h1>
+      <p class="muted">Inventory records for hosts that are planned, built, active, repaired, or retired.</p>
+    </div>
+  </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <h2>Create Asset</h2>
+  <form method="post" action="/assets">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-grid">
+      <p>
+        <label for="asset_tag">Asset tag</label>
+        <input id="asset_tag" name="asset_tag" placeholder="DESK-0001">
+      </p>
+      <p>
+        <label for="serial_number">Serial number</label>
+        <input id="serial_number" name="serial_number">
+      </p>
+      <p>
+        <label for="host_id">Linked host</label>
+        <select id="host_id" name="host_id">
+          <option value="">None</option>
+          {% for host in hosts %}
+            <option value="{{ host.id }}">{{ host.mac }} {{ host.hostname or "" }}</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p>
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          {% for status in statuses %}
+            <option value="{{ status.value }}">{{ status.value }}</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p>
+        <label for="owner">Owner</label>
+        <input id="owner" name="owner">
+      </p>
+      <p>
+        <label for="department">Department</label>
+        <input id="department" name="department">
+      </p>
+      <p>
+        <label for="location">Location</label>
+        <input id="location" name="location">
+      </p>
+      <p>
+        <label for="manufacturer">Manufacturer</label>
+        <input id="manufacturer" name="manufacturer">
+      </p>
+      <p>
+        <label for="model">Model</label>
+        <input id="model" name="model">
+      </p>
+    </div>
+    <p>
+      <label for="notes">Notes</label>
+      <textarea id="notes" name="notes"></textarea>
+    </p>
+    <p>
+      <label for="metadata_json">Metadata JSON</label>
+      <textarea id="metadata_json" name="metadata_json" placeholder='{"purchase_order": "PO-123"}'></textarea>
+    </p>
+    <button type="submit">Create asset</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="toolbar">
+    <h2>Asset Inventory</h2>
+    <span class="muted">{{ assets|length }} total</span>
+  </div>
+  {% if assets %}
+    <table>
+      <thead><tr><th>Asset</th><th>Serial</th><th>Host</th><th>Status</th><th>Owner</th><th>Location</th></tr></thead>
+      <tbody>
+        {% for asset in assets %}
+          <tr>
+            <td><a href="/assets/{{ asset.id }}">{{ asset.asset_tag or ("asset-" ~ asset.id) }}</a></td>
+            <td>{{ asset.serial_number or "" }}</td>
+            <td>{% if asset.host %}<a href="/hosts/{{ asset.host.id }}">{{ asset.host.mac }} {{ asset.host.hostname or "" }}</a>{% endif %}</td>
+            <td><span class="state">{{ asset.status.value }}</span></td>
+            <td>{{ asset.owner or "" }}</td>
+            <td>{{ asset.location or "" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No assets yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

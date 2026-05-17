@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}{{ image.name }} | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <h1 style="margin-right: auto;">{{ image.name }}</h1>
+    <a class="button secondary" href="/images">Back to images</a>
+  </div>
+  <p class="muted">
+    {{ profile_count }} profile{{ "" if profile_count == 1 else "s" }} use this image.
+    {% if blocking_profile_count %}
+      Remove assigned hosts or manual profiles before deleting.
+    {% else %}
+      Auto-generated profiles are removed with the image.
+    {% endif %}
+  </p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/images/{{ image.id }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-grid">
+      <p>
+        <label for="name">Name</label>
+        <input id="name" name="name" required value="{{ image.name }}">
+      </p>
+      <p>
+        <label for="os_type">OS type</label>
+        <select id="os_type" name="os_type">
+          {% for os in os_types %}
+            <option value="{{ os.value }}" {% if image.os_type == os %}selected{% endif %}>{{ os.value }}</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p>
+        <label for="architecture">Architecture</label>
+        <input id="architecture" name="architecture" value="{{ image.architecture }}">
+      </p>
+      <p>
+        <label for="kernel_path">Kernel path</label>
+        <input id="kernel_path" name="kernel_path" value="{{ image.kernel_path or '' }}">
+      </p>
+      <p>
+        <label for="initrd_path">Initrd path</label>
+        <input id="initrd_path" name="initrd_path" value="{{ image.initrd_path or '' }}">
+      </p>
+      <p>
+        <label for="repo_url">Install repo URL</label>
+        <input id="repo_url" name="repo_url" value="{{ image.repo_url or '' }}">
+      </p>
+      <p>
+        <label for="bootloader_path">Windows wimboot path</label>
+        <input id="bootloader_path" name="bootloader_path" value="{{ image.bootloader_path or '' }}">
+      </p>
+      <p>
+        <label for="wim_path">Windows boot.wim path</label>
+        <input id="wim_path" name="wim_path" value="{{ image.wim_path or '' }}">
+      </p>
+      <p>
+        <label for="bcd_path">Windows BCD path</label>
+        <input id="bcd_path" name="bcd_path" value="{{ image.bcd_path or '' }}">
+      </p>
+      <p>
+        <label for="boot_sdi_path">Windows boot.sdi path</label>
+        <input id="boot_sdi_path" name="boot_sdi_path" value="{{ image.boot_sdi_path or '' }}">
+      </p>
+    </div>
+    <p>
+      <label for="extra_kernel_args">Extra kernel args</label>
+      <input id="extra_kernel_args" name="extra_kernel_args" value="{{ image.extra_kernel_args or '' }}">
+    </p>
+    <p>
+      <label for="metadata_json">Metadata JSON</label>
+      <textarea id="metadata_json" name="metadata_json">{{ metadata_json }}</textarea>
+    </p>
+    <div class="actions">
+      <button type="submit">Save image</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Delete Image</h2>
+  <p class="muted">Images assigned to profiles cannot be deleted.</p>
+  <form method="post" action="/images/{{ image.id }}/delete">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="danger" type="submit" {% if blocking_profile_count %}disabled{% endif %}>Delete image</button>
+  </form>
+</section>
+{% endblock %}

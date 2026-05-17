@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% block title %}{{ host.mac }} | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <h1 style="margin-right: auto;">{{ host.mac }}</h1>
+    <div class="actions">
+      <form class="inline" method="post" action="/hosts/{{ host.id }}/request-install">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit">Request install</button>
+      </form>
+      <form class="inline" method="post" action="/hosts/{{ host.id }}/decommission">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="danger" type="submit">Decommission</button>
+      </form>
+      <form class="inline" method="post" action="/hosts/{{ host.id }}/run-ansible">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="secondary" type="submit">Run Ansible</button>
+      </form>
+    </div>
+  </div>
+  <p class="muted">Current state: <span class="state {{ host.state.value }}">{{ host.state.value }}</span></p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/hosts/{{ host.id }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-grid">
+      <p>
+        <label for="hostname">Hostname</label>
+        <input id="hostname" name="hostname" value="{{ host.hostname or '' }}">
+      </p>
+      <p>
+        <label for="profile_id">Profile</label>
+        <select id="profile_id" name="profile_id">
+          <option value="">None</option>
+          {% for profile in profiles %}
+            <option value="{{ profile.id }}" {% if host.profile_id == profile.id %}selected{% endif %}>{{ profile.name }}</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p>
+        <label for="state">State</label>
+        <select id="state" name="state">
+          {% for state in states %}
+            <option value="{{ state.value }}" {% if host.state == state %}selected{% endif %}>{{ state.value }}</option>
+          {% endfor %}
+        </select>
+      </p>
+    </div>
+    <p>
+      <label for="variables_json">Host variables JSON</label>
+      <textarea id="variables_json" name="variables_json">{{ variables_json }}</textarea>
+    </p>
+    <button type="submit">Save host</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="actions">
+    <h2 style="margin-right: auto;">Asset</h2>
+    {% if asset %}
+      <a class="button secondary" href="/assets/{{ asset.id }}">Open asset</a>
+    {% else %}
+      <a class="button secondary" href="/assets">Create asset</a>
+    {% endif %}
+  </div>
+  {% if asset %}
+    <div class="grid">
+      <div class="metric"><span class="muted">Asset tag</span><strong style="font-size: 1.1rem;">{{ asset.asset_tag or "" }}</strong></div>
+      <div class="metric"><span class="muted">Serial</span><strong style="font-size: 1.1rem;">{{ asset.serial_number or "" }}</strong></div>
+      <div class="metric"><span class="muted">Status</span><strong style="font-size: 1.1rem;">{{ asset.status.value }}</strong></div>
+      <div class="metric"><span class="muted">Location</span><strong style="font-size: 1.1rem;">{{ asset.location or "" }}</strong></div>
+    </div>
+  {% else %}
+    <p class="muted">No inventory asset is linked yet. A successful provisioning callback will create one automatically if missing.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Build History</h2>
+  {% if builds %}
+    <table>
+      <thead><tr><th>Started</th><th>Completed</th><th>State</th><th>Profile</th><th>Image</th></tr></thead>
+      <tbody>
+        {% for build in builds %}
+          <tr>
+            <td>{{ build.started_at }}</td>
+            <td>{{ build.completed_at or "" }}</td>
+            <td><span class="state {{ build.state.value }}">{{ build.state.value }}</span></td>
+            <td>{{ build.profile.name if build.profile else "" }}</td>
+            <td>{{ build.image.name if build.image else "" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No build records yet.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Ansible Post-Install</h2>
+  {% if ansible_runs %}
+    <table>
+      <thead><tr><th>Queued</th><th>Started</th><th>Completed</th><th>State</th><th>Playbook</th><th>Return</th><th>Error</th></tr></thead>
+      <tbody>
+        {% for run in ansible_runs %}
+          <tr>
+            <td>{{ run.queued_at }}</td>
+            <td>{{ run.started_at or "" }}</td>
+            <td>{{ run.completed_at or "" }}</td>
+            <td><span class="state {{ run.state.value }}">{{ run.state.value }}</span></td>
+            <td>{{ run.playbook_path }}</td>
+            <td>{{ run.return_code if run.return_code is not none else "" }}</td>
+            <td>{{ run.error or "" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No Ansible runs recorded for this host.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>Audit Events</h2>
+  {% if events %}
+    <table>
+      <thead><tr><th>Time</th><th>Type</th><th>Source</th><th>Token</th><th>Payload</th></tr></thead>
+      <tbody>
+        {% for event in events %}
+          <tr>
+            <td>{{ event.created_at }}</td>
+            <td>{{ event.event_type }}</td>
+            <td>{{ event.source_ip or "" }}</td>
+            <td>{{ event.token_prefix or "" }}</td>
+            <td><code>{{ event.payload }}</code></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No events for this host.</p>
+  {% endif %}
+</section>
+{% endblock %}

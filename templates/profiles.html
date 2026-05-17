@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Profiles | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <div>
+      <h1>Host Groups</h1>
+      <p class="muted">Profiles are generated automatically from installation media. Open a profile only when you need overrides.</p>
+    </div>
+    <a class="button" href="/images">Manage installation media</a>
+  </div>
+  <div class="surface">
+    Unattended enrollment:
+    {% if unattended_auto_enroll %}
+      <span class="state SUCCESS">ENABLED</span>
+    {% else %}
+      <span class="state FAILED">DISABLED</span>
+    {% endif %}
+    Default profile:
+    {% if default_profile %}
+      <a href="/profiles/{{ default_profile.id }}">{{ default_profile.name }}</a>
+    {% else %}
+      <span class="muted">none</span>
+    {% endif %}
+  </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if images %}
+    <div class="surface">
+      Default profiles are created for every image with generated install credentials and OS-specific installer defaults.
+      Edit a profile to change passwords, SSH keys, variables, templates, or Ansible post-install settings.
+    </div>
+  {% else %}
+    <div class="surface">
+      Create or import installation media first. A default profile will be created automatically for each image.
+    </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="toolbar">
+    <h2>Profiles</h2>
+    <span class="muted">{{ profiles|length }} total</span>
+  </div>
+  {% if profiles %}
+    <table>
+      <thead><tr><th>Name</th><th>Image</th><th>Source</th><th>Unattended</th><th>Template</th><th>Ansible</th><th>Variables</th></tr></thead>
+      <tbody>
+        {% for profile in profiles %}
+          {% set managed = profile.variables.get("_pxe_app", {}).get("managed") == "auto-profile" %}
+          <tr>
+            <td><a href="/profiles/{{ profile.id }}">{{ profile.name }}</a></td>
+            <td>{{ profile.image.name if profile.image else "" }}</td>
+            <td>
+              {% if managed %}
+                <span class="state SUCCESS">AUTO</span>
+              {% else %}
+                <span class="state">MANUAL</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if default_profile and default_profile.id == profile.id %}
+                <span class="state SUCCESS">DEFAULT</span>
+              {% else %}
+                <form class="inline" method="post" action="/profiles/{{ profile.id }}/set-unattended-default">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                  <button class="secondary" type="submit">Set default</button>
+                </form>
+              {% endif %}
+            </td>
+            <td>{{ profile.template_path or "default" }}</td>
+            <td>
+              <a href="/profiles/{{ profile.id }}/post-install">
+                {% if profile.post_install_config and profile.post_install_config.enabled %}
+                  enabled
+                {% else %}
+                  configure
+                {% endif %}
+              </a>
+            </td>
+            <td>
+              {% if managed %}
+                <code>generated defaults</code>
+              {% else %}
+                <code>{{ profile.variables }}</code>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No profiles defined yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

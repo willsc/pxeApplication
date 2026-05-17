@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Events | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <div>
+      <h1>Audit Events</h1>
+      <p class="muted">Boot script requests, configuration fetches, registrations, and installer callbacks.</p>
+    </div>
+  </div>
+  {% if events %}
+    <table>
+      <thead><tr><th>Time</th><th>Type</th><th>Host</th><th>MAC</th><th>Source</th><th>User agent</th><th>Payload</th></tr></thead>
+      <tbody>
+        {% for event in events %}
+          <tr>
+            <td>{{ event.created_at }}</td>
+            <td>{{ event.event_type }}</td>
+            <td>{% if event.host_id %}<a href="/hosts/{{ event.host_id }}">{{ event.host_id }}</a>{% endif %}</td>
+            <td>{{ event.mac or "" }}</td>
+            <td>{{ event.source_ip or "" }}</td>
+            <td>{{ event.user_agent or "" }}</td>
+            <td><code>{{ event.payload }}</code></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No PXE events recorded yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

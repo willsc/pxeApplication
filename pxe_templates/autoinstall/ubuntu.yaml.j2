@@ -1,0 +1,57 @@
+#cloud-config
+{% set install_password_hash = vars.user_password_hash|default(root_password_hash, true) %}
+{% if not install_password_hash %}
+{{ required_user_password_hash_or_profile_root_password }}
+{% endif %}
+autoinstall:
+  version: 1
+  locale: "{{ vars.locale|default('en_US.UTF-8', true) }}"
+  keyboard:
+    layout: "{{ vars.keyboard|default('us', true) }}"
+  timezone: "{{ vars.timezone|default('UTC', true) }}"
+  identity:
+    hostname: "{{ host.hostname or 'ubuntu-host' }}"
+    username: "{{ vars.username|default('operator', true) }}"
+    password: "{{ install_password_hash }}"
+  ssh:
+    install-server: true
+    allow-pw: {{ vars.allow_password_ssh|default(false, true)|lower }}
+    authorized-keys:
+{% for key in authorized_keys %}
+      - "{{ key }}"
+{% endfor %}
+  storage:
+    layout:
+      name: "{{ vars.storage_layout|default('lvm', true) }}"
+  packages:
+    - curl
+    - openssh-server
+{% for pkg in extras.packages %}
+    - {{ pkg }}
+{% endfor %}
+  late-commands:
+    - curtin in-target --target=/target -- mkdir -p /root/.ssh
+    - |
+      cat > /target/root/.ssh/authorized_keys <<'EOF'
+{% for key in authorized_keys %}
+      {{ key }}
+{% endfor %}
+      EOF
+    - curtin in-target --target=/target -- chmod 700 /root/.ssh
+    - curtin in-target --target=/target -- chmod 600 /root/.ssh/authorized_keys
+{% if extras.bash %}
+    - |
+      cat > /target/root/pxe-finish.sh <<'PXEFINISH'
+{{ extras.bash }}
+      PXEFINISH
+    - curtin in-target --target=/target -- chmod +x /root/pxe-finish.sh
+    - curtin in-target --target=/target -- bash -c "/root/pxe-finish.sh > /root/pxe-finish.log 2>&1 || true"
+{% endif %}
+{% if extras.ansible_pull_url %}
+    - curtin in-target --target=/target -- bash -c "apt-get update -y && apt-get install -y --no-install-recommends ansible git || true"
+    - curtin in-target --target=/target -- bash -c "ansible-pull -U {{ extras.ansible_pull_url }} {{ extras.ansible_pull_playbook or 'local.yml' }} >> /root/pxe-ansible-pull.log 2>&1 || true"
+{% endif %}
+    - curtin in-target --target=/target -- bash -c "curl -fsS -X POST --data-urlencode status=done {{ host.callback_url }} || true"
+  error-commands:
+    - curl -fsS -X POST --data-urlencode status=failed --data-urlencode message=ubuntu-autoinstall-error {{ host.callback_url }} || true
+

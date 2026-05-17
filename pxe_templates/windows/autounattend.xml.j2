@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+{% if not root_password %}
+{{ required_profile_root_password_for_windows }}
+{% endif %}
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <SetupUILanguage>
+        <UILanguage>{{ vars.ui_language|default("en-US", true)|e }}</UILanguage>
+      </SetupUILanguage>
+      <InputLocale>{{ vars.input_locale|default("en-US", true)|e }}</InputLocale>
+      <SystemLocale>{{ vars.system_locale|default("en-US", true)|e }}</SystemLocale>
+      <UILanguage>{{ vars.ui_language|default("en-US", true)|e }}</UILanguage>
+      <UserLocale>{{ vars.user_locale|default("en-US", true)|e }}</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <DiskConfiguration>
+        <Disk wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <DiskID>{{ vars.disk_id|default(0, true) }}</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add">
+              <Order>1</Order>
+              <Type>Primary</Type>
+              <Size>500</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>2</Order>
+              <Type>Primary</Type>
+              <Extend>true</Extend>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order>
+              <PartitionID>1</PartitionID>
+              <Format>NTFS</Format>
+              <Label>System</Label>
+              <Active>true</Active>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order>
+              <PartitionID>2</PartitionID>
+              <Format>NTFS</Format>
+              <Label>Windows</Label>
+              <Letter>C</Letter>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+      <ImageInstall>
+        <OSImage>
+          <InstallTo>
+            <DiskID>{{ vars.disk_id|default(0, true) }}</DiskID>
+            <PartitionID>2</PartitionID>
+          </InstallTo>
+          <InstallFrom>
+            <MetaData wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+              <Key>/IMAGE/NAME</Key>
+              <Value>{{ vars.image_name|default("Windows 11 Pro", true)|e }}</Value>
+            </MetaData>
+          </InstallFrom>
+        </OSImage>
+      </ImageInstall>
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <FullName>{{ vars.full_name|default("PXE Operator", true)|e }}</FullName>
+        <Organization>{{ vars.organization|default("Organization", true)|e }}</Organization>
+{% if vars.product_key|default("", true) %}
+        <ProductKey>
+          <Key>{{ vars.product_key|e }}</Key>
+        </ProductKey>
+{% endif %}
+      </UserData>
+    </component>
+  </settings>
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <ComputerName>{{ host.hostname or "windows-host" }}</ComputerName>
+      <TimeZone>{{ vars.timezone|default("UTC", true)|e }}</TimeZone>
+    </component>
+  </settings>
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <InputLocale>{{ vars.input_locale|default("en-US", true)|e }}</InputLocale>
+      <SystemLocale>{{ vars.system_locale|default("en-US", true)|e }}</SystemLocale>
+      <UILanguage>{{ vars.ui_language|default("en-US", true)|e }}</UILanguage>
+      <UserLocale>{{ vars.user_locale|default("en-US", true)|e }}</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <NetworkLocation>Work</NetworkLocation>
+        <ProtectYourPC>1</ProtectYourPC>
+      </OOBE>
+      <UserAccounts>
+        <LocalAccounts>
+          <LocalAccount wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+            <Password>
+              <Value>{{ root_password|e }}</Value>
+              <PlainText>true</PlainText>
+            </Password>
+            <DisplayName>{{ vars.local_admin_username|default("pxeadmin", true)|e }}</DisplayName>
+            <Group>Administrators</Group>
+            <Name>{{ vars.local_admin_username|default("pxeadmin", true)|e }}</Name>
+          </LocalAccount>
+        </LocalAccounts>
+      </UserAccounts>
+      <FirstLogonCommands>
+{% set ns = namespace(order=1) %}
+{% if extras.packages %}
+        <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>{{ ns.order }}</Order>
+          <Description>Install extra packages via winget</Description>
+          <CommandLine>powershell.exe -ExecutionPolicy Bypass -NoProfile -Command "{% for pkg in extras.packages %}try {{ '{' }} winget install --silent --accept-package-agreements --accept-source-agreements --id {{ pkg|e }} {{ '}' }} catch {{ '{' }} {{ '}' }}; {% endfor %}exit 0"</CommandLine>
+        </SynchronousCommand>
+{% set ns.order = ns.order + 1 %}
+{% endif %}
+{% if extras.powershell %}
+        <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>{{ ns.order }}</Order>
+          <Description>Run pxe-app finish PowerShell script</Description>
+          <CommandLine>powershell.exe -ExecutionPolicy Bypass -NoProfile -EncodedCommand {{ extras.powershell|encode_powershell }}</CommandLine>
+        </SynchronousCommand>
+{% set ns.order = ns.order + 1 %}
+{% endif %}
+        <SynchronousCommand wcm:action="add" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+          <Order>{{ ns.order }}</Order>
+          <Description>Notify pxe-app provisioning complete</Description>
+          <CommandLine>powershell.exe -ExecutionPolicy Bypass -NoProfile -Command "try { Invoke-WebRequest -UseBasicParsing -Method POST -Uri '{{ host.callback_url }}' -Body @{status='done'} } catch { exit 0 }"</CommandLine>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>
+</unattend>
+

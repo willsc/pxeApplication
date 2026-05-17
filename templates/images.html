@@ -1,0 +1,646 @@
+{% extends "base.html" %}
+{% block title %}Setup &amp; Images | pxe-app{% endblock %}
+{% block head %}
+  {% set running = media_runs|selectattr('state.value','in',['QUEUED','RUNNING'])|list %}
+  <style>
+    /* Progress bars for in-flight jobs (polled via JS — no full-page reload). */
+    .progress-bar { position: relative; height: 0.55rem; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 30rem; overflow: hidden; }
+    .progress-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #4d7dff, #1a3eb8); transition: width 250ms; border-radius: inherit; }
+    .progress-bar.indeterminate > span { width: 30% !important; background: linear-gradient(90deg, transparent, #4d7dff, transparent); animation: pb-shimmer 1.25s linear infinite; }
+    @keyframes pb-shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+    .progress-meta { display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem; color: var(--muted); margin-top: 0.3rem; gap: 0.6rem; }
+    .progress-meta .pct { font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+    .probe-running { display: inline-flex; align-items: center; gap: 0.4rem; }
+    .probe-running .dot { width: 0.55rem; height: 0.55rem; border-radius: 999px; background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+  </style>
+  <style>
+    .setup-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+    .step-tile { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.85rem 0.95rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.35rem; position: relative; }
+    .step-tile .step-no { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; color: var(--muted-2); text-transform: uppercase; }
+    .step-tile h3 { font-size: 0.95rem; color: var(--ink); margin: 0; }
+    .step-tile .step-status { font-size: 0.82rem; color: var(--muted); }
+    .step-tile.done { border-color: #b6e0c4; background: linear-gradient(0deg, var(--ok-soft), #fff); }
+    .step-tile.done .step-no { color: var(--ok); }
+    .step-tile.todo { border-color: #f0d9a1; background: linear-gradient(0deg, var(--warn-soft), #fff); }
+    .step-tile.todo .step-no { color: var(--warn); }
+    .check { display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 600; }
+    .check.ok { color: var(--ok); }
+    .check.todo { color: var(--warn); }
+    .check.bad { color: var(--danger); }
+
+    .net-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; }
+    .net-cell { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.85rem 0.95rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.25rem; }
+    .net-cell .lbl { font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; color: var(--muted-2); text-transform: uppercase; }
+    .net-cell .val { font-size: 1rem; color: var(--ink); font-weight: 600; }
+    .net-cell .val.dim { color: var(--muted); font-weight: 500; }
+
+    .mode-pill { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.18rem 0.6rem; border-radius: 30rem; font-size: 0.78rem; font-weight: 700; }
+    .mode-pill.proxy { background: var(--accent-soft); color: var(--accent-strong); border: 1px solid #c2d4ff; }
+    .mode-pill.server { background: #f1ebfb; color: #6e3aa8; border: 1px solid #d8c8f3; }
+    .mode-pill.unknown { background: var(--bg-soft); color: var(--muted); border: 1px solid var(--line); }
+    .mode-pill::before { content: ""; width: 0.42rem; height: 0.42rem; border-radius: 999px; background: currentColor; opacity: 0.8; }
+
+    .distro-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
+    .distro-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.1rem 1.15rem; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 0.65rem; }
+    .distro-card header { display: flex; align-items: center; gap: 0.6rem; justify-content: space-between; }
+    .distro-card header .left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+    .distro-card header h3 { font-size: 1rem; color: var(--ink); margin: 0; }
+    .distro-card header .role { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted-2); padding: 0.18rem 0.5rem; border-radius: 30rem; background: var(--bg-soft); border: 1px solid var(--line); }
+    .distro-card header .role.server { color: var(--accent-strong); background: var(--accent-soft); border-color: #c2d4ff; }
+    .distro-card header .role.desktop { color: #6e3aa8; background: #f1ebfb; border-color: #d8c8f3; }
+    .distro-card header .role.workstation { color: #7a4a00; background: var(--warn-soft); border-color: #f0d9a1; }
+    .distro-card p.desc { color: var(--muted); font-size: 0.86rem; margin: 0; }
+    .distro-card .versions { display: flex; flex-direction: column; gap: 0.32rem; }
+    .distro-card .versions label { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.55rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; cursor: pointer; font-weight: 500; font-size: 0.88rem; color: var(--ink); }
+    .distro-card .versions label:hover { background: #fafbfc; }
+    .distro-card .versions label.imported { background: var(--ok-soft); border-color: #b6e0c4; }
+    .distro-card .versions input[type=checkbox] { width: auto; margin: 0; transform: scale(1.05); accent-color: var(--accent); }
+    .distro-card .versions .note { color: var(--muted-2); font-size: 0.78rem; margin-left: auto; }
+    .distro-card .card-actions { display: flex; gap: 0.5rem; align-items: center; justify-content: space-between; margin-top: auto; }
+    .distro-card .repo-hint { font-size: 0.78rem; color: var(--muted); }
+    .distro-card.has-images { box-shadow: 0 0 0 1px #b6e0c4, var(--shadow-sm); }
+    .distro-card .count { background: var(--ok-soft); color: var(--ok); border: 1px solid #b6e0c4; padding: 0.1rem 0.5rem; border-radius: 30rem; font-size: 0.75rem; font-weight: 700; }
+    .distro-card.windows .versions { display: none; }
+
+    .file-list { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.82rem; color: var(--ink-soft); margin: 0; padding: 0; list-style: none; }
+    .file-list li { display: flex; align-items: center; gap: 0.45rem; padding: 0.18rem 0; }
+    .file-list li.ok::before { content: "✓"; color: var(--ok); font-weight: 700; }
+    .file-list li.missing::before { content: "✗"; color: var(--danger); font-weight: 700; }
+    .file-list li.warn::before { content: "○"; color: var(--warn); font-weight: 700; }
+  </style>
+{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div class="panel-title">
+      <h1>Setup &amp; Installation Media</h1>
+      <p class="muted">Step-by-step PXE provisioning setup. Each step is checked live; reruns are idempotent and update existing rows.</p>
+    </div>
+    <div class="actions">
+      <a class="button secondary" href="/profiles">Profiles</a>
+      <a class="button secondary" href="/hosts">Hosts</a>
+    </div>
+  </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  {% if running %}
+    <p class="notice">{{ running|length }} media job{{ "s" if running|length != 1 else "" }} in progress. This page refreshes every 5 seconds.</p>
+  {% endif %}
+
+  <div class="setup-steps">
+    <div class="step-tile {{ 'done' if setup.step1_done else 'todo' }}">
+      <span class="step-no">Step 1 · Bootloaders</span>
+      <h3>iPXE / wimboot</h3>
+      <div class="step-status">
+        {% if setup.step1_done %}
+          <span class="check ok">✓ Ready</span>
+        {% else %}
+          <span class="check bad">✗ Missing {{ setup.bootloaders.missing_required|join(', ') }}</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="step-tile {{ 'done' if setup.step2_done else 'todo' }}">
+      <span class="step-no">Step 2 · OS media</span>
+      <h3>Install images</h3>
+      <div class="step-status">
+        {% if setup.step2_done %}<span class="check ok">✓ {{ setup.images_total }} imported</span>
+        {% else %}<span class="check todo">⚠ None imported</span>{% endif %}
+      </div>
+    </div>
+    <div class="step-tile {{ 'done' if setup.step3_done else 'todo' }}">
+      <span class="step-no">Step 3 · Profiles</span>
+      <h3>{% if setup.profiles.unattended_default %}{{ setup.profiles.unattended_default.name }}{% else %}Auto-enroll{% endif %}</h3>
+      <div class="step-status">
+        {% if setup.step3_done %}<span class="check ok">✓ Default set</span>
+        {% elif setup.profiles.profile_count %}<span class="check todo">⚠ Pick default in <a href="/profiles">Profiles</a></span>
+        {% else %}<span class="check todo">After media import</span>{% endif %}
+      </div>
+    </div>
+    <div class="step-tile {{ 'done' if setup.step4_ready else 'todo' }}">
+      <span class="step-no">Step 4 · Hosts</span>
+      <h3>Enroll &amp; provision</h3>
+      <div class="step-status">
+        {% if setup.step4_ready %}<a href="/hosts">Go to hosts →</a>
+        {% else %}<span class="check todo">Steps 1–3 first</span>{% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="card-head">
+    <div>
+      <h2>Network &amp; DHCP</h2>
+      <p class="muted small">Live view of the configured PXE network and DHCP mode. Use the probe to verify whether another DHCP server is already on this VLAN.</p>
+    </div>
+    <form method="post" action="/network/dhcp-probe">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="secondary" type="submit" id="probe-button">Probe DHCP now</button>
+    </form>
+  </div>
+  {% set saved_flash = request.query_params.get('saved') %}
+  {% if saved_flash %}
+    {% set _flash_kind, _, _flash_value = saved_flash.partition(':') %}
+    <p class="notice" style="background: var(--ok-soft); color: var(--ok); border-color: #b6e0c4;">
+      ✓
+      {% if _flash_kind == 'host_ip' %}Host IP saved as <code>{{ _flash_value }}</code>.
+      {% elif _flash_kind == 'dhcp_mode' %}DHCP mode set to <code>{{ _flash_value }}</code>.
+      {% else %}Saved.{% endif %}
+    </p>
+  {% endif %}
+  <p class="muted small" style="margin-top:-0.25rem;">
+    Sidecar:
+    {% if setup.dhcp.sidecar_configured %}
+      <code>{{ setup.dhcp.sidecar_configured and 'configured' }}</code> — probe runs in the <code>pxe-probe</code> container on host networking.
+    {% else %}
+      <span class="check todo">not configured</span> — set <code>PXE_DHCP_PROBE_URL</code> or run <code>scripts/check_dhcp.sh</code> on the host. The pxe-app container cannot see DHCP traffic on its own.
+    {% endif %}
+  </p>
+
+  <div class="net-panel">
+    <div class="net-cell">
+      <span class="lbl">Configured mode</span>
+      {% set m = setup.dhcp.configured_mode or 'unknown' %}
+      <span class="val"><span class="mode-pill {{ m }}">{{ m }}</span></span>
+      <span class="muted small">
+        {% if m == 'proxy' %}dnsmasq runs as proxyDHCP only.
+        {% elif m == 'server' %}dnsmasq leases addresses + serves PXE.
+        {% else %}Not configured. Run setup.sh on the host.{% endif %}
+      </span>
+    </div>
+    <div class="net-cell">
+      <span class="lbl">PXE network</span>
+      <span class="val {{ 'dim' if not setup.dhcp.pxe_network }}">{{ setup.dhcp.pxe_network or 'unknown' }}</span>
+      <span class="muted small">First dhcp-range network from dnsmasq.conf.</span>
+    </div>
+    <div class="net-cell">
+      <span class="lbl">Host IP</span>
+      <span class="val {{ 'dim' if not setup.dhcp.host_ip }}">{{ setup.dhcp.host_ip or 'unknown' }}</span>
+      <form method="post" action="/network/host-ip" style="display:flex; gap:0.35rem; margin-top:0.3rem;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="text" name="host_ip" value="{{ setup.dhcp.host_ip or '' }}" placeholder="192.168.1.10" pattern="\d+\.\d+\.\d+\.\d+" required style="flex:1;">
+        <button class="secondary button-sm" type="submit">Save</button>
+      </form>
+      <span class="muted small">Advertised to PXE clients. Override here or set <code>PXE_HOST_IP</code> in .env.</span>
+    </div>
+    <div class="net-cell" id="probe-last-cell">
+      <span class="lbl">Last probe</span>
+      {% if setup.dhcp.detection_running %}
+        <span class="val"><span class="probe-running"><span class="dot"></span>Probing…</span></span>
+        <div class="progress-bar indeterminate" style="margin-top:0.35rem;"><span></span></div>
+      {% elif setup.dhcp.detected_at %}
+        <span class="val">{{ setup.dhcp.detected_offers|length }} offer{{ 's' if setup.dhcp.detected_offers|length != 1 else '' }}</span>
+        <span class="muted small">{{ setup.dhcp.detected_at }}{% if setup.dhcp.detection_source %} · {{ setup.dhcp.detection_source }}{% endif %}</span>
+      {% else %}
+        <span class="val dim">never</span>
+        <span class="muted small">Click "Probe DHCP now".</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <details style="margin-top:0.85rem;">
+    <summary class="small muted">Manually set DHCP mode (skip the probe)</summary>
+    <form method="post" action="/network/dhcp-mode" style="margin-top:0.4rem; display:flex; gap:0.55rem; align-items:center; flex-wrap:wrap;">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <select name="mode">
+        <option value="proxy" {% if setup.dhcp.configured_mode == 'proxy' %}selected{% endif %}>proxy (existing DHCP server on network)</option>
+        <option value="server" {% if setup.dhcp.configured_mode == 'server' %}selected{% endif %}>server (dnsmasq leases addresses)</option>
+      </select>
+      <button class="secondary" type="submit">Save DHCP mode</button>
+      <span class="muted small">Updates <code>PXE_DHCP_MODE</code> for the running app. Rerun <code>scripts/setup.sh --dhcp-mode &lt;mode&gt;</code> to persist <code>dnsmasq.conf</code>.</span>
+    </form>
+  </details>
+
+  {% if setup.dhcp.recommendation %}
+    <p class="notice" style="margin-top:0.85rem;">{{ setup.dhcp.recommendation }}</p>
+  {% endif %}
+  {% if setup.dhcp.detection_error %}
+    <p class="error small" style="margin-top:0.6rem;">{{ setup.dhcp.detection_error }}</p>
+  {% endif %}
+
+  {% if setup.dhcp.detected_offers %}
+    <details style="margin-top:0.85rem;">
+      <summary class="small muted">DHCP offers detected on the network</summary>
+      <table style="margin-top:0.4rem;">
+        <thead><tr><th>Server</th><th>Offered IP</th><th>Router</th><th>DNS</th></tr></thead>
+        <tbody>
+          {% for offer in setup.dhcp.detected_offers %}
+            <tr>
+              <td><code>{{ offer.server_id or offer.source_ip }}</code></td>
+              <td><code>{{ offer.offered_ip }}</code></td>
+              <td><code>{{ offer.router or '—' }}</code></td>
+              <td><code>{{ offer.dns_servers|join(', ') if offer.dns_servers else '—' }}</code></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </details>
+  {% endif %}
+
+  {% if setup.dhcp.dhcp_range_directives or setup.dhcp.bootloader_directives %}
+    <details style="margin-top:0.85rem;">
+      <summary class="small muted">Active dnsmasq directives (parsed from {{ setup.dhcp.config_path }})</summary>
+      <pre class="log" style="margin-top:0.4rem;">{% for d in setup.dhcp.dhcp_range_directives %}dhcp-range={{ d }}
+{% endfor %}{% for d in setup.dhcp.bootloader_directives %}dhcp-boot={{ d }}
+{% endfor %}</pre>
+    </details>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="card-head">
+    <div>
+      <h2>Step 1 · iPXE bootloaders</h2>
+      <p class="muted small">
+        Downloads <code>undionly.kpxe</code> (BIOS), <code>ipxe.efi</code> + <code>snponly.efi</code> (UEFI, Secure Boot), and <code>wimboot</code> (Windows) into <code>tftproot/</code>. Idempotent.
+      </p>
+    </div>
+    <form method="post" action="/media-imports/bootloaders">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit">{{ "Re-download" if setup.bootloaders.have_manifest else "Download bootloaders" }}</button>
+    </form>
+  </div>
+  <div class="surface">
+    <ul class="file-list">
+      {% for name in ['undionly.kpxe', 'ipxe.efi', 'snponly.efi', 'ipxe32.efi', 'wimboot'] %}
+        <li class="{{ 'ok' if name not in setup.bootloaders.missing_required and name not in setup.bootloaders.missing_recommended else ('missing' if name in setup.bootloaders.missing_required else 'warn') }}">
+          tftproot/{{ name }}
+          {% if name in setup.bootloaders.missing_required %} — required{% endif %}
+          {% if name in setup.bootloaders.missing_recommended %} — recommended for Secure Boot / Windows{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="card-head">
+    <div>
+      <h2>Step 2 · Import OS media</h2>
+      <p class="muted small">Pick distros and versions. Each card runs the importer in the background and creates an Image row plus a default Profile.</p>
+    </div>
+  </div>
+
+  <div class="distro-grid">
+    {% for d in setup.distros if d.distro.slug != 'windows' %}
+      <form class="distro-card {{ 'has-images' if d.image_count }}" method="post" action="/media-imports/distro">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="slug" value="{{ d.distro.slug }}">
+        <header>
+          <div class="left">
+            <h3>{{ d.distro.label }}</h3>
+            <span class="role {{ d.distro.role }}">{{ d.distro.role }}</span>
+          </div>
+          {% if d.image_count %}
+            <span class="count">{{ d.image_count }} imported</span>
+          {% endif %}
+        </header>
+        <p class="desc">{{ d.distro.description }}</p>
+        <div class="versions">
+          {% for version in d.distro.versions %}
+            {% set imported = version.key in d.versions_imported %}
+            <label class="{{ 'imported' if imported }}">
+              <input type="checkbox" name="versions" value="{{ version.key }}" {% if version.key in d.distro.default_versions and not imported %}checked{% endif %}>
+              <span>{{ version.label }}{% if imported %} <span class="muted small">· imported</span>{% endif %}</span>
+              {% if version.note %}<span class="note">{{ version.note }}</span>{% endif %}
+            </label>
+          {% endfor %}
+        </div>
+        <p class="repo-hint">{{ d.distro.repo_hint }}</p>
+        <div class="card-actions">
+          <span class="muted small">{{ d.distro.versions|length }} version{{ "s" if d.distro.versions|length != 1 else "" }} available</span>
+          <button type="submit">Import selected</button>
+        </div>
+      </form>
+    {% endfor %}
+
+    {% for d in setup.distros if d.distro.slug == 'windows' %}
+      <form class="distro-card windows {{ 'has-images' if d.image_count }}" method="post" action="/media-imports/windows">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <header>
+          <div class="left">
+            <h3>{{ d.distro.label }}</h3>
+            <span class="role desktop">desktop</span>
+          </div>
+          {% if d.image_count %}<span class="count">{{ d.image_count }} imported</span>{% endif %}
+        </header>
+        <p class="desc">{{ d.distro.description }}</p>
+        <p>
+          <label for="windows_url">Microsoft ISO URL</label>
+          <input id="windows_url" name="url" placeholder="temporary microsoft.com URL">
+        </p>
+        <p>
+          <label for="windows_iso">…or local ISO path</label>
+          <input id="windows_iso" name="iso" placeholder="data/isos/Win11.iso">
+        </p>
+        <div class="form-grid">
+          <p>
+            <label for="windows_name">Image name</label>
+            <input id="windows_name" name="name" value="windows-11">
+          </p>
+          <p>
+            <label for="windows_sha256">SHA256 (optional)</label>
+            <input id="windows_sha256" name="sha256">
+          </p>
+        </div>
+        <p class="repo-hint">{{ d.distro.repo_hint }}</p>
+        <div class="card-actions">
+          <span class="muted small">Microsoft does not allow scraping.</span>
+          <button type="submit">Import Windows ISO</button>
+        </div>
+      </form>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="card-head">
+    <div>
+      <h2>Step 3 · Profiles</h2>
+      <p class="muted small">A managed default profile is created for every image. Pick one as the unattended-install default in the Profiles page.</p>
+    </div>
+    <a class="button secondary" href="/profiles">Open Profiles</a>
+  </div>
+  <div class="surface">
+    <ul class="file-list">
+      <li class="{{ 'ok' if setup.profiles.profile_count else 'missing' }}">{{ setup.profiles.profile_count }} profile(s)</li>
+      <li class="{{ 'ok' if setup.profiles.unattended_default else 'warn' }}">
+        Unattended default:
+        {% if setup.profiles.unattended_default %}
+          <a href="/profiles/{{ setup.profiles.unattended_default.id }}">{{ setup.profiles.unattended_default.name }}</a>
+        {% else %}
+          <span class="muted">not chosen yet</span>
+        {% endif %}
+      </li>
+      <li class="{{ 'ok' if setup.profiles.every_image_has_profile else 'warn' }}">
+        {% if setup.profiles.every_image_has_profile %}Every image has a profile.
+        {% else %}Some images have no profile — re-import or create one manually.{% endif %}
+      </li>
+    </ul>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="card-head">
+    <div>
+      <h2>Recent import runs</h2>
+      <p class="muted small">{{ media_runs|length }} most-recent jobs. Output truncated to the last 2KB.</p>
+    </div>
+  </div>
+  {% if media_runs %}
+    <table id="media-runs-table">
+      <thead><tr><th>Queued</th><th>Kind</th><th>State</th><th>Progress</th><th>Completed</th><th>Output</th></tr></thead>
+      <tbody>
+        {% for run in media_runs %}
+          {% set pct = (run.metadata_json or {}).get('progress_percent') %}
+          {% set phase = (run.metadata_json or {}).get('progress_phase') %}
+          {% set active = run.state.value in ['QUEUED', 'RUNNING'] %}
+          <tr data-run-id="{{ run.id }}">
+            <td class="small">{{ run.queued_at.strftime('%Y-%m-%d %H:%M:%S') if run.queued_at else "" }}</td>
+            <td><code>{{ run.kind }}</code></td>
+            <td><span class="state {{ run.state.value }}" data-field="state">{{ run.state.value }}</span></td>
+            <td style="min-width: 12rem;">
+              {% if active or pct is not none %}
+                <div class="progress-bar {{ 'indeterminate' if pct is none and active else '' }}" data-field="bar">
+                  <span style="width: {{ pct if pct is not none else 0 }}%;" data-field="bar-fill"></span>
+                </div>
+                <div class="progress-meta">
+                  <span data-field="phase">{{ phase or ('Starting' if active else '') }}</span>
+                  <span class="pct" data-field="pct">{{ pct ~ '%' if pct is not none else '' }}</span>
+                </div>
+              {% else %}
+                <span class="muted small">—</span>
+              {% endif %}
+            </td>
+            <td class="small" data-field="completed">{{ run.completed_at.strftime('%Y-%m-%d %H:%M:%S') if run.completed_at else "—" }}</td>
+            <td>
+              {% if run.error %}<p class="error small">{{ run.error }}</p>{% endif %}
+              {% if run.stderr or run.stdout %}
+                <details>
+                  <summary class="small muted">Show output</summary>
+                  <pre class="log">{{ (run.stderr or run.stdout)[-2000:] }}</pre>
+                </details>
+              {% else %}
+                <span class="muted small">{{ run.command|join(" ") }}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="surface"><p class="muted">No media imports have been queued yet.</p></div>
+  {% endif %}
+</section>
+
+<script>
+(function () {
+  const tableBody = document.querySelector('#media-runs-table tbody');
+  const probeCell = document.getElementById('probe-last-cell');
+
+  function fmtPct(value) {
+    if (value === null || value === undefined) return '';
+    return value + '%';
+  }
+
+  function activeStates(runs) {
+    return runs.filter(function (r) { return r.state === 'QUEUED' || r.state === 'RUNNING'; });
+  }
+
+  function updateMediaRun(row, run) {
+    const stateEl = row.querySelector('[data-field="state"]');
+    if (stateEl) {
+      stateEl.textContent = run.state;
+      stateEl.className = 'state ' + run.state;
+    }
+    const fill = row.querySelector('[data-field="bar-fill"]');
+    const bar = row.querySelector('[data-field="bar"]');
+    const pctEl = row.querySelector('[data-field="pct"]');
+    const phaseEl = row.querySelector('[data-field="phase"]');
+    if (fill && bar) {
+      const pct = run.progress_percent;
+      if (pct !== null && pct !== undefined) {
+        fill.style.width = pct + '%';
+        bar.classList.remove('indeterminate');
+      } else if (run.state === 'RUNNING' || run.state === 'QUEUED') {
+        bar.classList.add('indeterminate');
+        fill.style.width = '';
+      }
+    }
+    if (pctEl) pctEl.textContent = fmtPct(run.progress_percent);
+    if (phaseEl) phaseEl.textContent = run.progress_phase || (run.state === 'QUEUED' ? 'Queued' : (run.state === 'RUNNING' ? 'Running' : ''));
+    const completedEl = row.querySelector('[data-field="completed"]');
+    if (completedEl && run.completed_at) {
+      completedEl.textContent = run.completed_at.replace('T', ' ').slice(0, 19);
+    }
+  }
+
+  async function pollMedia() {
+    if (!tableBody) return false;
+    try {
+      const res = await fetch('/api/media-imports', { credentials: 'same-origin' });
+      if (!res.ok) return false;
+      const body = await res.json();
+      const runs = body.runs || [];
+      let stillActive = false;
+      for (const run of runs) {
+        const row = tableBody.querySelector('tr[data-run-id="' + run.id + '"]');
+        if (row) updateMediaRun(row, run);
+        if (run.state === 'QUEUED' || run.state === 'RUNNING') stillActive = true;
+      }
+      // If a new run was queued that we don't have a row for, do a soft reload.
+      const newRunQueued = runs.some(function (r) {
+        return !tableBody.querySelector('tr[data-run-id="' + r.id + '"]');
+      });
+      if (newRunQueued) {
+        window.location.reload();
+        return true;
+      }
+      // If everything just finished, reload once to repopulate output.
+      if (!stillActive && tableBody.dataset.lastActive === '1') {
+        window.location.reload();
+        return true;
+      }
+      tableBody.dataset.lastActive = stillActive ? '1' : '0';
+      return stillActive;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function pollProbe() {
+    if (!probeCell) return false;
+    try {
+      const res = await fetch('/api/network/dhcp-probe', { credentials: 'same-origin' });
+      if (!res.ok) return false;
+      const body = await res.json();
+      if (body.running) {
+        probeCell.innerHTML =
+          '<span class="lbl">Last probe</span>' +
+          '<span class="val"><span class="probe-running"><span class="dot"></span>Probing…</span></span>' +
+          '<div class="progress-bar indeterminate" style="margin-top:0.35rem;"><span></span></div>';
+        return true;
+      }
+      const count = (body.offers || []).length;
+      const offers = count + ' offer' + (count === 1 ? '' : 's');
+      const sourceTag = body.source ? ' · ' + body.source : '';
+      probeCell.innerHTML =
+        '<span class="lbl">Last probe</span>' +
+        '<span class="val">' + offers + '</span>' +
+        '<span class="muted small">' + (body.checked_at || '') + sourceTag + '</span>';
+      // If error: full page reload so the recommendation banner re-renders.
+      if (body.error && probeCell.dataset.lastError !== body.error) {
+        probeCell.dataset.lastError = body.error;
+        window.location.reload();
+        return false;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  let interval = null;
+  function tick() {
+    Promise.all([pollMedia(), pollProbe()]).then(function (active) {
+      // Always keep polling - the operator may queue a new run.
+      // Slower interval when nothing is running.
+      const anyActive = active.some(Boolean);
+      const nextInterval = anyActive ? 1500 : 5000;
+      clearInterval(interval);
+      interval = setInterval(tick, nextInterval);
+    });
+  }
+  tick();
+})();
+</script>
+
+<section class="panel">
+  <div class="card-head">
+    <div>
+      <h2>Image registry</h2>
+      <p class="muted small">{{ images|length }} image{{ "s" if images|length != 1 else "" }} registered.</p>
+    </div>
+  </div>
+  {% if images %}
+    <table>
+      <thead><tr><th>Name</th><th>OS</th><th>Kernel / wimboot</th><th>Repo / WIM / ISO</th></tr></thead>
+      <tbody>
+        {% for image in images %}
+          <tr>
+            <td><a href="/images/{{ image.id }}">{{ image.name }}</a></td>
+            <td><span class="state">{{ image.os_type.value }}</span></td>
+            <td class="small"><code>{{ image.kernel_path or image.bootloader_path or "" }}</code></td>
+            <td class="small"><code>{{ image.repo_url or image.wim_path or "" }}</code></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="surface"><p class="muted">No images defined yet. Pick a distro above to start.</p></div>
+  {% endif %}
+</section>
+
+<details class="section">
+  <summary>Create or edit an image manually (advanced)</summary>
+  <form method="post" action="/images">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="muted small">Use this only for custom builds. Imports above create rows automatically.</p>
+    <div class="form-grid">
+      <p>
+        <label for="name">Name</label>
+        <input id="name" name="name" required placeholder="ubuntu-24.04-desktop">
+      </p>
+      <p>
+        <label for="os_type">OS type</label>
+        <select id="os_type" name="os_type">
+          {% for os in os_types %}
+            <option value="{{ os.value }}">{{ os.value }}</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p>
+        <label for="architecture">Architecture</label>
+        <input id="architecture" name="architecture" value="x86_64">
+      </p>
+      <p>
+        <label for="kernel_path">Kernel path</label>
+        <input id="kernel_path" name="kernel_path" placeholder="ubuntu/24.04/casper/vmlinuz">
+      </p>
+      <p>
+        <label for="initrd_path">Initrd path</label>
+        <input id="initrd_path" name="initrd_path" placeholder="ubuntu/24.04/casper/initrd">
+      </p>
+      <p>
+        <label for="repo_url">Repo URL / served ISO path</label>
+        <input id="repo_url" name="repo_url" placeholder="http://mirror/rocky/... or ubuntu/24.04-server/disk.iso">
+      </p>
+      <p>
+        <label for="bootloader_path">Windows wimboot path</label>
+        <input id="bootloader_path" name="bootloader_path" placeholder="wimboot">
+      </p>
+      <p>
+        <label for="wim_path">Windows boot.wim path</label>
+        <input id="wim_path" name="wim_path" placeholder="windows/sources/boot.wim">
+      </p>
+      <p>
+        <label for="bcd_path">Windows BCD path</label>
+        <input id="bcd_path" name="bcd_path" placeholder="windows/boot/BCD">
+      </p>
+      <p>
+        <label for="boot_sdi_path">Windows boot.sdi path</label>
+        <input id="boot_sdi_path" name="boot_sdi_path" placeholder="windows/boot/boot.sdi">
+      </p>
+    </div>
+    <p>
+      <label for="extra_kernel_args">Extra kernel args</label>
+      <input id="extra_kernel_args" name="extra_kernel_args">
+    </p>
+    <p>
+      <label for="metadata_json">Metadata JSON</label>
+      <textarea id="metadata_json" name="metadata_json" placeholder='{"release": "24.04"}'></textarea>
+    </p>
+    <div class="actions"><button type="submit">Create image and profile</button></div>
+  </form>
+</details>
+{% endblock %}

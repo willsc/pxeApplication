@@ -1,0 +1,11 @@
+---
+- name: Example pxe-app post-installation handoff
+  hosts: pxe_app
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Confirm Ansible reached the provisioned host
+      ansible.builtin.debug:
+        msg: "Post-installation reached {{ inventory_hostname }}"
+

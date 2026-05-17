@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${PXE_POSTGRES_DB:-pxeapp}
+      POSTGRES_USER: ${PXE_POSTGRES_USER:-pxe}
+      POSTGRES_PASSWORD: ${PXE_POSTGRES_PASSWORD:-pxe-change-me}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  pxe-app:
+    build: .
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # When set, the in-app probe service POSTs to the sidecar instead of
+      # trying to bind UDP/68 itself (which is impossible on a bridge net).
+      PXE_DHCP_PROBE_URL: ${PXE_DHCP_PROBE_URL:-http://host.docker.internal:8765/probe}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./data:/app/data
+      - ./pxe_templates:/app/pxe_templates:ro
+      - ./tftproot:/app/tftproot
+      - ./ansible:/app/ansible
+      - ./dnsmasq/dnsmasq.conf:/app/dnsmasq/dnsmasq.conf:ro
+    ports:
+      - "${PXE_APP_PORT:-8000}:${PXE_LISTEN_PORT:-8000}"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os, urllib.request; port=os.environ.get('PXE_LISTEN_PORT', '8000'); urllib.request.urlopen('http://127.0.0.1:%s/healthz' % port, timeout=2)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  pxe-probe:
+    build: .
+    command: ["python", "-m", "app.dhcp_probe_server"]
+    # Host networking is required so the probe sees DHCP traffic on the
+    # operator's PXE VLAN; on a bridge network the container is isolated
+    # from L2 broadcasts.
+    network_mode: host
+    cap_add:
+      - NET_BIND_SERVICE
+      - NET_RAW
+    environment:
+      PXE_PROBE_HTTP_HOST: ${PXE_PROBE_HTTP_HOST:-0.0.0.0}
+      PXE_PROBE_HTTP_PORT: ${PXE_PROBE_HTTP_PORT:-8765}
+      PXE_PROBE_INTERFACE: ${PXE_PROBE_INTERFACE:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os, urllib.request; port=os.environ.get('PXE_PROBE_HTTP_PORT', '8765'); urllib.request.urlopen('http://127.0.0.1:%s/healthz' % port, timeout=2)\""]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  pxe-files:
+    image: nginx:1.27-alpine
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./tftproot:/usr/share/nginx/html:ro
+    ports:
+      - "${PXE_FILES_PORT:-8080}:8080"
+
+  dnsmasq:
+    image: quay.io/poseidon/dnsmasq:v0.5.0
+    command: ["-k", "--conf-file=/etc/dnsmasq.conf"]
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - ./dnsmasq/dnsmasq.conf:/etc/dnsmasq.conf:ro
+      - ./tftproot:/var/lib/tftpboot:ro
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ asset.asset_tag or "Asset" }} | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <h1>{{ asset.asset_tag or ("asset-" ~ asset.id) }}</h1>
+    <a class="button secondary" href="/assets">Back to assets</a>
+  </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/assets/{{ asset.id }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-grid">
+      <p>
+        <label for="asset_tag">Asset tag</label>
+        <input id="asset_tag" name="asset_tag" value="{{ asset.asset_tag or '' }}">
+      </p>
+      <p>
+        <label for="serial_number">Serial number</label>
+        <input id="serial_number" name="serial_number" value="{{ asset.serial_number or '' }}">
+      </p>
+      <p>
+        <label for="host_id">Linked host</label>
+        <select id="host_id" name="host_id">
+          <option value="">None</option>
+          {% for host in hosts %}
+            <option value="{{ host.id }}" {% if asset.host_id == host.id %}selected{% endif %}>{{ host.mac }} {{ host.hostname or "" }}</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p>
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          {% for status in statuses %}
+            <option value="{{ status.value }}" {% if asset.status == status %}selected{% endif %}>{{ status.value }}</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p>
+        <label for="owner">Owner</label>
+        <input id="owner" name="owner" value="{{ asset.owner or '' }}">
+      </p>
+      <p>
+        <label for="department">Department</label>
+        <input id="department" name="department" value="{{ asset.department or '' }}">
+      </p>
+      <p>
+        <label for="location">Location</label>
+        <input id="location" name="location" value="{{ asset.location or '' }}">
+      </p>
+      <p>
+        <label for="manufacturer">Manufacturer</label>
+        <input id="manufacturer" name="manufacturer" value="{{ asset.manufacturer or '' }}">
+      </p>
+      <p>
+        <label for="model">Model</label>
+        <input id="model" name="model" value="{{ asset.model or '' }}">
+      </p>
+    </div>
+    <p>
+      <label for="notes">Notes</label>
+      <textarea id="notes" name="notes">{{ asset.notes or "" }}</textarea>
+    </p>
+    <p>
+      <label for="metadata_json">Metadata JSON</label>
+      <textarea id="metadata_json" name="metadata_json">{{ metadata_json }}</textarea>
+    </p>
+    <button type="submit">Save asset</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Build History</h2>
+  {% if builds %}
+    <table>
+      <thead><tr><th>Started</th><th>Completed</th><th>State</th><th>Host</th><th>Profile</th><th>Image</th></tr></thead>
+      <tbody>
+        {% for build in builds %}
+          <tr>
+            <td>{{ build.started_at }}</td>
+            <td>{{ build.completed_at or "" }}</td>
+            <td><span class="state {{ build.state.value }}">{{ build.state.value }}</span></td>
+            <td><a href="/hosts/{{ build.host.id }}">{{ build.host.mac }}</a></td>
+            <td>{{ build.profile.name if build.profile else "" }}</td>
+            <td>{{ build.image.name if build.image else "" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No builds recorded for this asset.</p>
+  {% endif %}
+</section>
+{% endblock %}

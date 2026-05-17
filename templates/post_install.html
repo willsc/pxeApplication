@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Post-Install | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <div>
+      <h1>Ansible Post-Install: {{ profile.name }}</h1>
+      <p class="muted">Playbook paths are relative to <code>ansible/playbooks</code>. Example: <code>postinstall-example.yml</code>.</p>
+    </div>
+    <a class="button secondary" href="/profiles/{{ profile.id }}">Back to profile</a>
+  </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/profiles/{{ profile.id }}/post-install">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-grid">
+      <p>
+        <label for="enabled">Enabled</label>
+        <input id="enabled" name="enabled" type="checkbox" {% if config and config.enabled %}checked{% endif %}>
+      </p>
+      <p>
+        <label for="playbook_path">Playbook path</label>
+        <input id="playbook_path" name="playbook_path" required value="{{ config.playbook_path if config else 'postinstall-example.yml' }}">
+      </p>
+      <p>
+        <label for="ssh_user">SSH user</label>
+        <input id="ssh_user" name="ssh_user" value="{{ config.ssh_user if config else 'root' }}">
+      </p>
+      <p>
+        <label for="ssh_port">SSH port</label>
+        <input id="ssh_port" name="ssh_port" type="number" min="1" max="65535" value="{{ config.ssh_port if config else 22 }}">
+      </p>
+      <p>
+        <label for="ssh_private_key_path">SSH private key path</label>
+        <input id="ssh_private_key_path" name="ssh_private_key_path" value="{{ config.ssh_private_key_path if config and config.ssh_private_key_path else '' }}" placeholder="/app/data/keys/provisioning_ed25519">
+      </p>
+      <p>
+        <label for="become">Become</label>
+        <input id="become" name="become" type="checkbox" {% if not config or config.become %}checked{% endif %}>
+      </p>
+      <p>
+        <label for="host_key_checking">Host key checking</label>
+        <input id="host_key_checking" name="host_key_checking" type="checkbox" {% if config and config.host_key_checking %}checked{% endif %}>
+      </p>
+      <p>
+        <label for="inventory_groups">Inventory groups</label>
+        <input id="inventory_groups" name="inventory_groups" value="{{ config.inventory_groups if config and config.inventory_groups else 'pxe_app' }}">
+      </p>
+      <p>
+        <label for="tags">Tags</label>
+        <input id="tags" name="tags" value="{{ config.tags if config and config.tags else '' }}">
+      </p>
+      <p>
+        <label for="skip_tags">Skip tags</label>
+        <input id="skip_tags" name="skip_tags" value="{{ config.skip_tags if config and config.skip_tags else '' }}">
+      </p>
+      <p>
+        <label for="timeout_seconds">Timeout seconds</label>
+        <input id="timeout_seconds" name="timeout_seconds" type="number" min="1" max="86400" value="{{ config.timeout_seconds if config else 3600 }}">
+      </p>
+    </div>
+    <p>
+      <label for="inventory_vars_json">Inventory variables JSON</label>
+      <textarea id="inventory_vars_json" name="inventory_vars_json">{{ inventory_vars_json }}</textarea>
+    </p>
+    <p>
+      <label for="extra_vars_json">Extra variables JSON</label>
+      <textarea id="extra_vars_json" name="extra_vars_json">{{ extra_vars_json }}</textarea>
+    </p>
+    <button type="submit">Save post-install config</button>
+  </form>
+</section>
+{% endblock %}

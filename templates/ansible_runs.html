@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Ansible Runs | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <div>
+      <h1>Ansible Runs</h1>
+      <p class="muted">Post-install playbook executions queued from callbacks or manual operator actions.</p>
+    </div>
+  </div>
+  {% if runs %}
+    <table>
+      <thead><tr><th>Queued</th><th>Host</th><th>State</th><th>Playbook</th><th>Return</th><th>Completed</th><th>Error</th></tr></thead>
+      <tbody>
+        {% for run in runs %}
+          <tr>
+            <td>{{ run.queued_at }}</td>
+            <td><a href="/hosts/{{ run.host.id }}">{{ run.host.mac }} {{ run.host.hostname or "" }}</a></td>
+            <td><span class="state {{ run.state.value }}">{{ run.state.value }}</span></td>
+            <td>{{ run.playbook_path }}</td>
+            <td>{{ run.return_code if run.return_code is not none else "" }}</td>
+            <td>{{ run.completed_at or "" }}</td>
+            <td>{{ run.error or "" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No Ansible runs have been queued.</p>
+  {% endif %}
+</section>
+{% endblock %}

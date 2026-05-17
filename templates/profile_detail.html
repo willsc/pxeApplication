@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ profile.name }} | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <h1 style="margin-right: auto;">{{ profile.name }}</h1>
+    <div class="actions">
+      <a class="button secondary" href="/profiles/{{ profile.id }}/post-install">Post-install</a>
+      <a class="button secondary" href="/profiles">Back to profiles</a>
+    </div>
+  </div>
+  <p class="muted">{{ host_count }} host{{ "" if host_count == 1 else "s" }} use this profile.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form method="post" action="/profiles/{{ profile.id }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-grid">
+      <p>
+        <label for="name">Name</label>
+        <input id="name" name="name" required value="{{ profile.name }}">
+      </p>
+      <p>
+        <label for="image_id">Image</label>
+        <select id="image_id" name="image_id">
+          {% for image in images %}
+            <option value="{{ image.id }}" {% if profile.image_id == image.id %}selected{% endif %}>{{ image.name }} ({{ image.os_type.value }})</option>
+          {% endfor %}
+        </select>
+      </p>
+      <p>
+        <label for="template_path">Template path</label>
+        <input id="template_path" name="template_path" value="{{ profile.template_path or '' }}">
+      </p>
+      <p>
+        <label for="root_password">New root/admin password</label>
+        <input id="root_password" name="root_password" type="password" autocomplete="new-password">
+      </p>
+    </div>
+    {% if profile.root_password %}
+      <p>
+        <label for="clear_root_password">Clear stored root/admin password</label>
+        <input id="clear_root_password" name="clear_root_password" type="checkbox">
+      </p>
+    {% endif %}
+    <p>
+      <label for="variables_json">Profile variables JSON</label>
+      <textarea id="variables_json" name="variables_json">{{ variables_json }}</textarea>
+    </p>
+    <p>
+      <label for="authorized_keys">Authorized SSH keys</label>
+      <textarea id="authorized_keys" name="authorized_keys">{{ profile.authorized_keys or "" }}</textarea>
+    </p>
+    <button type="submit">Save profile</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="card-head">
+    <div>
+      <h2>Unattended install extras</h2>
+      <p class="muted small">
+        Injected at the END of the OS install while the installer is still in
+        control — the install stays unattended.
+        Linux uses <code>late-commands</code> / <code>%post</code> / preseed
+        <code>late_command</code>. Windows uses <code>FirstLogonCommands</code>
+        with a base64 <code>-EncodedCommand</code> PowerShell.
+        For ongoing config-management over SSH after the host reboots, use the
+        <a href="/profiles/{{ profile.id }}/post-install">Post-install</a> page instead.
+      </p>
+    </div>
+  </div>
+  <form method="post" action="/profiles/{{ profile.id }}/extras">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p>
+      <label for="extra_packages">Extra packages</label>
+      <textarea id="extra_packages" name="extra_packages" rows="3" placeholder="Whitespace or comma separated. Lines starting with # are comments.&#10;Linux: apt/dnf package names. Windows: winget package IDs (e.g. Git.Git, Microsoft.PowerShell).">{{ extras.extra_packages or '' if extras else '' }}</textarea>
+    </p>
+    <p>
+      <label for="finish_script_bash">Linux finish script (bash)</label>
+      <textarea id="finish_script_bash" name="finish_script_bash" rows="6" placeholder="#!/bin/bash&#10;set -euo pipefail&#10;# runs inside the target rootfs at the end of the install">{{ extras.finish_script_bash or '' if extras else '' }}</textarea>
+    </p>
+    <p>
+      <label for="finish_script_powershell">Windows finish script (PowerShell)</label>
+      <textarea id="finish_script_powershell" name="finish_script_powershell" rows="6" placeholder="# runs as the local admin on first logon&#10;Write-Host 'hello from finish script'">{{ extras.finish_script_powershell or '' if extras else '' }}</textarea>
+    </p>
+    <div class="form-grid">
+      <p>
+        <label for="ansible_pull_url">ansible-pull repo URL (optional, Linux)</label>
+        <input id="ansible_pull_url" name="ansible_pull_url" value="{{ extras.ansible_pull_url or '' if extras else '' }}" placeholder="https://git.example.com/ops/playbooks.git">
+      </p>
+      <p>
+        <label for="ansible_pull_playbook">ansible-pull playbook</label>
+        <input id="ansible_pull_playbook" name="ansible_pull_playbook" value="{{ extras.ansible_pull_playbook or '' if extras else '' }}" placeholder="local.yml">
+      </p>
+    </div>
+    <button type="submit">Save extras</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Delete Profile</h2>
+  <p class="muted">Profiles assigned to hosts cannot be deleted.</p>
+  <form method="post" action="/profiles/{{ profile.id }}/delete">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="danger" type="submit" {% if host_count %}disabled{% endif %}>Delete profile</button>
+  </form>
+</section>
+{% endblock %}

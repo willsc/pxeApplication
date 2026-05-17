@@ -1,0 +1,63 @@
+d-i debian-installer/locale string {{ vars.locale|default("en_US.UTF-8", true) }}
+d-i keyboard-configuration/xkb-keymap select {{ vars.keyboard|default("us", true) }}
+d-i time/zone string {{ vars.timezone|default("UTC", true) }}
+d-i clock-setup/utc boolean true
+d-i netcfg/choose_interface select auto
+d-i netcfg/get_hostname string {{ host.hostname or "debian-host" }}
+d-i netcfg/get_domain string {{ vars.domain|default("local", true) }}
+d-i mirror/country string manual
+d-i mirror/http/hostname string {{ vars.mirror_hostname|default("deb.debian.org", true) }}
+d-i mirror/http/directory string {{ vars.mirror_directory|default("/debian", true) }}
+d-i mirror/http/proxy string {{ vars.http_proxy|default("", true) }}
+
+{% if root_password %}
+d-i passwd/root-login boolean true
+d-i passwd/root-password password {{ root_password }}
+d-i passwd/root-password-again password {{ root_password }}
+{% else %}
+d-i passwd/root-login boolean false
+{% endif %}
+d-i passwd/make-user boolean true
+d-i passwd/user-fullname string {{ vars.username|default("Operator", true) }}
+d-i passwd/username string {{ vars.username|default("operator", true) }}
+{% if root_password %}
+d-i passwd/user-password password {{ root_password }}
+d-i passwd/user-password-again password {{ root_password }}
+{% else %}
+{{ required_profile_root_password_for_debian_user }}
+{% endif %}
+
+d-i partman-auto/method string lvm
+d-i partman-lvm/device_remove_lvm boolean true
+d-i partman-md/device_remove_md boolean true
+d-i partman-lvm/confirm boolean true
+d-i partman-lvm/confirm_nooverwrite boolean true
+d-i partman-auto/choose_recipe select atomic
+d-i partman/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+
+tasksel tasksel/first multiselect standard, ssh-server
+d-i pkgsel/include string curl openssh-server sudo{% for pkg in extras.packages %} {{ pkg }}{% endfor %}
+d-i grub-installer/only_debian boolean true
+d-i finish-install/reboot_in_progress note
+
+d-i preseed/late_command string \
+  mkdir -p /target/root/.ssh; \
+  chmod 700 /target/root/.ssh; \
+{% for key in authorized_keys %}
+  echo '{{ key }}' >> /target/root/.ssh/authorized_keys; \
+{% endfor %}
+  chmod 600 /target/root/.ssh/authorized_keys; \
+{% if extras.bash %}
+  echo {{ extras.bash|tojson }} > /target/root/pxe-finish.sh; \
+  in-target /bin/chmod +x /root/pxe-finish.sh; \
+  in-target /bin/bash -c "/root/pxe-finish.sh > /root/pxe-finish.log 2>&1 || true"; \
+{% endif %}
+{% if extras.ansible_pull_url %}
+  in-target /bin/bash -c "apt-get update -y && apt-get install -y --no-install-recommends ansible git || true"; \
+  in-target /bin/bash -c "ansible-pull -U {{ extras.ansible_pull_url }} {{ extras.ansible_pull_playbook or 'local.yml' }} >> /root/pxe-ansible-pull.log 2>&1 || true"; \
+{% endif %}
+  in-target /bin/bash -c "curl -fsS -X POST --data-urlencode status=done {{ host.callback_url }} || true"
+

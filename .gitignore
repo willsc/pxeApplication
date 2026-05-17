@@ -1,0 +1,25 @@
+# Secrets and generated config
+.env
+.env.*
+dnsmasq/dnsmasq.conf
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Runtime data
+data/
+tftproot/*
+!tftproot/.gitkeep
+ansible/playbooks/*-runs/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Misc
+*.log

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Hosts | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="toolbar">
+    <div>
+      <h1>All Hosts</h1>
+      <p class="muted">Systems enrolled for PXE boot, unattended install, and post-install automation.</p>
+    </div>
+  </div>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <h2>Create Host</h2>
+  <form method="post" action="/hosts">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-grid">
+      <p>
+        <label for="mac">MAC address</label>
+        <input id="mac" name="mac" placeholder="aa:bb:cc:dd:ee:ff" required>
+      </p>
+      <p>
+        <label for="hostname">Hostname</label>
+        <input id="hostname" name="hostname" placeholder="desk-001">
+      </p>
+      <p>
+        <label for="profile_id">Profile</label>
+        <select id="profile_id" name="profile_id">
+          <option value="">None</option>
+          {% for profile in profiles %}
+            <option value="{{ profile.id }}">{{ profile.name }}</option>
+          {% endfor %}
+        </select>
+      </p>
+    </div>
+    <p>
+      <label for="variables_json">Host variables JSON</label>
+      <textarea id="variables_json" name="variables_json" placeholder='{"disk": "/dev/sda"}'></textarea>
+    </p>
+    <button type="submit">Create host</button>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="toolbar">
+    <h2>Host Inventory</h2>
+    <span class="muted">{{ hosts|length }} total</span>
+  </div>
+  {% if hosts %}
+    <table>
+      <thead><tr><th>MAC</th><th>Hostname</th><th>Profile</th><th>State</th><th>Last boot</th></tr></thead>
+      <tbody>
+        {% for host in hosts %}
+          <tr>
+            <td><a href="/hosts/{{ host.id }}">{{ host.mac }}</a></td>
+            <td>{{ host.hostname or "" }}</td>
+            <td>{{ host.profile.name if host.profile else "" }}</td>
+            <td><span class="state {{ host.state.value }}">{{ host.state.value }}</span></td>
+            <td>{{ host.last_boot_at or "" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">No hosts enrolled yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

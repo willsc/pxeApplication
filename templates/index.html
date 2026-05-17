@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | pxe-app{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div class="panel-title">
+      <h1>Provisioning dashboard</h1>
+      <p class="muted">PXE endpoints are unauthenticated by design — keep this service on an isolated provisioning VLAN.</p>
+    </div>
+    <div class="actions">
+      <a class="button" href="/hosts">Enroll host</a>
+      <a class="button secondary" href="/images">Manage images</a>
+      <a class="button ghost" href="/events">Audit events</a>
+    </div>
+  </div>
+  <div class="grid">
+    {% for state, count in counts.items() %}
+      <div class="metric">
+        <span class="state {{ state }}">{{ state }}</span>
+        <strong>{{ count }}</strong>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="panel">
+  <div class="card-head">
+    <div>
+      <h2>Recent PXE events</h2>
+      <p class="muted small">Most recent 10 audit entries.</p>
+    </div>
+    <a class="button secondary button-sm" href="/events">View all</a>
+  </div>
+  {% if recent_events %}
+    <table>
+      <thead><tr><th>Time</th><th>Type</th><th>MAC</th><th>Source</th><th>Payload</th></tr></thead>
+      <tbody>
+        {% for event in recent_events %}
+          <tr>
+            <td class="small">{{ event.created_at }}</td>
+            <td><code>{{ event.event_type }}</code></td>
+            <td class="small">{{ event.mac or "—" }}</td>
+            <td class="small">{{ event.source_ip or "—" }}</td>
+            <td><code class="small">{{ event.payload }}</code></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <div class="surface"><p class="muted">No PXE events recorded yet.</p></div>
+  {% endif %}
+</section>
+{% endblock %}
