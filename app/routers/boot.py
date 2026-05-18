@@ -243,10 +243,12 @@ async def boot_callback(
         host.state = HostState.PROVISIONED
         host.provisioned_at = utcnow().astimezone(timezone.utc)
         callback_status = "done"
+        callback_event = "install_complete"
         build_state = BuildState.PROVISIONED
     elif raw_status in {"failed", "fail", "error"}:
         host.state = HostState.FAILED
         callback_status = "failed"
+        callback_event = "install_failed"
         build_state = BuildState.FAILED
     else:
         record_event(
@@ -267,7 +269,7 @@ async def boot_callback(
     host.install_token = generate_install_token()
     record_event(
         db,
-        event_type="callback",
+        event_type=callback_event,
         request=request,
         host=host,
         token=token,
