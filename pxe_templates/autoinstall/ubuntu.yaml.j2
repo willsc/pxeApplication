@@ -16,10 +16,12 @@ autoinstall:
   ssh:
     install-server: true
     allow-pw: {{ vars.allow_password_ssh|default(false, true)|lower }}
-    authorized-keys:
+    authorized-keys:{% if authorized_keys %}
 {% for key in authorized_keys %}
       - "{{ key }}"
 {% endfor %}
+{% else %} []
+{% endif %}
   storage:
     layout:
       name: "{{ vars.storage_layout|default('lvm', true) }}"
