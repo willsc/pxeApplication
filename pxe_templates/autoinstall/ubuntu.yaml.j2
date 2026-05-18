@@ -44,7 +44,7 @@ autoinstall:
 {% if extras.bash %}
     - |
       cat > /target/root/pxe-finish.sh <<'PXEFINISH'
-{{ extras.bash }}
+{{ extras.bash | indent(6, True) }}
       PXEFINISH
     - curtin in-target --target=/target -- chmod +x /root/pxe-finish.sh
     - curtin in-target --target=/target -- bash -c "/root/pxe-finish.sh > /root/pxe-finish.log 2>&1 || true"
